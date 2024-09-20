@@ -19,6 +19,7 @@ CREATE TABLE logs_eventos (
     id_log    INTEGER NOT NULL,
     data_hora TIMESTAMP(0),
     evento    VARCHAR2(200),
+    tipo    VARCHAR2(200),
     PRIMARY KEY (id_log)
 );
 
@@ -26,8 +27,8 @@ CREATE TABLE qualidade_ar (
     id_dado                        INTEGER NOT NULL,
     id_estacao                     INTEGER NOT NULL,
     data_hora                      TIMESTAMP(0),
-    nivel_pm2_5                    NUMBER(4, 2),
-    nivel_pm10                     NUMBER(4, 2),
+    nivel_pm2_5                    NUMBER(5, 2),
+    nivel_pm10                     NUMBER(5, 2),
     temperatura                    NUMBER(5, 2),
     umidade                        NUMBER(5, 2),
     config_alertas_id_configuracao INTEGER NOT NULL,
@@ -164,10 +165,10 @@ CREATE OR REPLACE PROCEDURE insere_tipo_desastre (
 
 
 -- Insert log 
-CREATE OR REPLACE PROCEDURE LOG_EMERGENCY_EVENT(p_descricao VARCHAR2) IS
+CREATE OR REPLACE PROCEDURE LOG_EVENT(p_descricao VARCHAR2, p_tipo VARCHAR2) IS
     BEGIN
-        INSERT INTO logs_eventos (id_log, data_hora, evento)
-        VALUES ( log_id_seq.NEXTVAL ,SYSTIMESTAMP, p_descricao);
+        INSERT INTO logs_eventos (id_log, data_hora, evento, tipo)
+        VALUES ( log_id_seq.NEXTVAL ,SYSTIMESTAMP, p_descricao, p_tipo);
     END;
 /
 --
@@ -180,7 +181,7 @@ FOR EACH ROW
     BEGIN
         -- Ejemplo: Ejecutar procedimiento cuando niveles de PM2.5 o PM10 exceden el límite
         IF :NEW.nivel_pm2_5 > 100 OR :NEW.nivel_pm10 > 100 THEN
-            LOG_EMERGENCY_EVENT('Calidad del aire crítica detectada');
+            LOG_EVENT('Calidad del aire crítica detectada', 'qualidade de ar');
         END IF;
     END;
 /
@@ -211,7 +212,7 @@ DECLARE
         -- Verifica si la intensidad excede el límite crítico
         IF v_intensidade > v_limite_critico THEN
             -- Insert en el log
-            LOG_EMERGENCY_EVENT('¡Alerta! Tipo de Desastre: ' || v_tipo_desastre_nome || ' en ' || v_localizacao || ' - Intensidad: ' || v_intensidade);
+            LOG_EVENT('¡Alerta! Tipo de Desastre: ' || v_tipo_desastre_nome || ' en ' || v_localizacao || ' - Intensidad: ' || v_intensidade, 'desastres naturais');
             -- Alerta vía DBMS_OUTPUT con el nombre del tipo de desastre
             DBMS_OUTPUT.PUT_LINE('¡Alerta! Tipo de Desastre: ' || v_tipo_desastre_nome || ' en ' || v_localizacao || ' - Intensidad: ' || v_intensidade);
         END IF;
@@ -240,33 +241,33 @@ DECLARE
         IF v_chuva = 1 THEN
             -- Se a chuva é acida (pH < 5.6)
             IF v_acidez_da_chuva < 5.6 THEN
-                DBMS_OUTPUT.PUT_LINE('¡Alerta! Chuva ácida detectada pH em: ' || v_acidez_da_chuva ||'.');
+                LOG_EVENT('¡Alerta! Chuva ácida detectada pH em: ' || v_acidez_da_chuva ||'.', 'clima');
             ELSE
                 -- Chuva normal
-                DBMS_OUTPUT.PUT_LINE('Está chovendo.');
+                LOG_EVENT('Está chovendo.', 'clima');
             END IF;
         ELSIF v_chuva = 0 THEN
             -- Se paro de chover
-            DBMS_OUTPUT.PUT_LINE('Clima sem chuva.');
+            LOG_EVENT('Clima sem chuva.', 'clima');
         END IF;
 
         -- Alerta de umidade fora do ponto ótimo para a saúde
         IF v_umidade < 35 THEN
-            DBMS_OUTPUT.PUT_LINE('Umidade baixa.');
+            LOG_EVENT('Umidade baixa.', 'clima');
         ELSIF v_umidade > 65 THEN
-            DBMS_OUTPUT.PUT_LINE('Umidade alta.');
+            LOG_EVENT('Umidade alta.', 'clima');
         END IF;
 
         -- Alerta de temperatura extrema (ponto crítico de frio ou calor)
         IF v_temperatura < 5 THEN
-            DBMS_OUTPUT.PUT_LINE('¡Alerta! Temperatura muito baixa, Temp: ' || v_temperatura || '.');
+            LOG_EVENT('¡Alerta! Temperatura muito baixa, Temp: ' || v_temperatura || '.', 'clima');
         ELSIF v_temperatura > 35 THEN
-            DBMS_OUTPUT.PUT_LINE('¡Alerta! Temperatura muito alta, Temp: ' || v_temperatura || '.');
+            LOG_EVENT('¡Alerta! Temperatura muito alta, Temp: ' || v_temperatura || '.', 'clima');
         END IF;
 
         -- Alerta de vento forte
         IF v_velocidade_do_vento > 60 THEN
-            DBMS_OUTPUT.PUT_LINE('¡Alerta! Ventos fortes detectados, velocidade de: '|| v_velocidade_do_vento || '.');
+            LOG_EVENT('¡Alerta! Ventos fortes detectados, velocidade de: '|| v_velocidade_do_vento || '.', 'clima');
         END IF;
     END;
 /
@@ -281,7 +282,7 @@ INSERT INTO qualidade_ar (id_dado, id_estacao, data_hora, nivel_pm2_5, nivel_pm1
 VALUES (qualidade_ar_seq.NEXTVAL, 1, SYSTIMESTAMP, 150, 150, 23, 50, 1);
 
 -- Verificar si el trigger se activó y si el evento crítico fue registrado
-SELECT * FROM logs_eventos;
+SELECT * FROM logs_eventos WHERE tipo = 'qualidade de ar';
 --
 
 
@@ -364,3 +365,5 @@ VALUES (condicoes_meteorologicas_seq.NEXTVAL, 1, SYSTIMESTAMP, 3.0, 60, 0, 15.0,
 -- h. Teste: Chuva normal sem alertas (não deveria ativar nenhum alerta)
 INSERT INTO Condicoes_Meteorologicas (id_condicao, id_estacao, data_hora, temperatura, umidade, chuva, velocidade_do_vento, acidez_da_chuva)
 VALUES (condicoes_meteorologicas_seq.NEXTVAL, 1, SYSTIMESTAMP, 22.0, 55, 1, 10.0, 6.0);
+
+SELECT * FROM logs_eventos WHERE tipo = 'clima';
